@@ -1,0 +1,64 @@
+name: Deploy Web Application - Trigger
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'code/**'
+      - 'kubernetes/web/**'
+      - '.github/workflows/deploy-web.yaml'
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy-web:
+    runs-on: ubuntu-latest
+    env:
+      ECR_REPOSITORY: ${{ format('{0}/app', vars.ECR_REPOSITORY) }}
+      IMAGE_TAG: ${{ vars.IMAGE_TAG }}
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Configure AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-region: ${{ secrets.AWS_REGION }}
+        role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/github-action-role
+
+    - name: Login to Amazon ECR
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v2
+
+    - name: Build and Push ECR
+      uses: docker/build-push-action@v5
+      id: build-image
+      with:
+        context: .
+        file: Dockerfile
+        push: true
+        tags: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG != '' && env.IMAGE_TAG || github.sha }}
+
+    - name: Setup kubeconfig
+      run: |
+        mkdir -p ~/.kube
+        echo "${{ secrets.KUBE_CONFIG }}" > ~/.kube/config
+    
+    - name: Update Deployment Image
+      run: |
+        kubectl set image deployment/booli-targets \
+          booli-targets=${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }} \
+          -n booli-targets
+
+    - name: Apply web manifests
+      run: |
+        kubectl apply -f kubernetes/web/ --validate=false
+
+    - name: Verify rollout
+      run: |
+        kubectl rollout status deployment/booli-targets -n booli-targets
