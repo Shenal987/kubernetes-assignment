@@ -48,16 +48,16 @@ jobs:
       run: |
         mkdir -p ~/.kube
         echo "${{ secrets.KUBE_CONFIG }}" > ~/.kube/config
+
+    - name: Apply web manifests
+      run: |
+        kubectl apply -f kubernetes/web/ --validate=false
     
     - name: Update Deployment Image
       run: |
         kubectl set image deployment/booli-targets \
           booli-targets=${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }} \
           -n booli-targets
-
-    - name: Apply web manifests
-      run: |
-        kubectl apply -f kubernetes/web/ --validate=false
 
     - name: Verify rollout
       run: |
