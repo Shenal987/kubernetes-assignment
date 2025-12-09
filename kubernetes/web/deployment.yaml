@@ -1,0 +1,86 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: booli-targets
+  namespace: booli-targets
+spec:
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: booli-targets
+  template:
+    metadata:
+      labels:
+        app: booli-targets
+    spec:
+      serviceAccountName: booli-targets
+      containers:
+      - name: booli-targets
+        image: <ECR_IMAGE>       
+        imagePullPolicy: Always
+
+        env:
+        - name: MYSQL_HOST
+          value: "mysql"
+        - name: MYSQL_ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mysql-secret
+              key: MYSQL_ROOT_PASSWORD
+        - name: MYSQL_DATABASE
+          valueFrom:
+            secretKeyRef:
+              name: mysql-secret
+              key: MYSQL_DATABASE
+        - name: MYSQL_USER
+          valueFrom:
+            secretKeyRef:
+              name: mysql-secret
+              key: MYSQL_USER
+        - name: MYSQL_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mysql-secret
+              key: MYSQL_PASSWORD
+
+        ports:
+        - containerPort: 8080
+          protocol: TCP
+
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 10
+
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 10
+
+        resources:
+          requests:
+            cpu: 10m
+            memory: 4Mi
+          limits:
+            cpu: 10m
+            memory: 4Mi
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: booli-targets
+  namespace: booli-targets
+spec:
+  type: ClusterIP
+  selector:
+    app: booli-targets
+  ports:
+    - port: 8080
+      targetPort: 8080
+      name: http

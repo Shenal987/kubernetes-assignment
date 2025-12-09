@@ -1,0 +1,35 @@
+name: Deploy MYSQL Database - Manual Trigger
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repo
+      uses: actions/checkout@v4
+
+    - name: Configure AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-region: ${{ secrets.AWS_REGION }}
+        role-to-assume: arn:aws:iam::${{secrets.AWS_ACCOUNT_ID}}:role/github-action-role
+
+    - name: Setup kubeconfig
+      run: |
+        mkdir -p ~/.kube
+        echo "${{ secrets.KUBE_CONFIG }}" > ~/.kube/config
+
+    - name: Create Namespace
+      run: |
+        kubectl apply -f kubernetes/namespace.yaml
+
+    - name: Create Secrets
+      run: |
+        kubectl apply -f kubernetes/db/secrets.yaml
+
+    - name: Deploy Mysql
+      run: |
+        kubectl apply -f kubernetes/db/deployment.yaml
